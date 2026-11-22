@@ -15,6 +15,7 @@ Keep in mind this is still experimental and you will surely find issues. If you 
 - **Adaptive TUI padding**: pads your shell, but drops to 0px edge-to-edge in full-screen apps (`nvim`, `btop`, `yazi`).
 - **Smart click**: `Ctrl+click` files to open in your editor, `Ctrl+click` folders to `cd`.
 - **Smart selection**: double-click words/URLs, triple-click lines, and `Alt+drag` for a rectangular column of text.
+- **Follows your cwd**: a new window starts in the last active zinc window's directory; `zinc --cwd /path` overrides it.
 - **Lightweight**: memory footprint stays around ~23MB in a maximized window.
 
 Full breakdown in [features.md](features.md).

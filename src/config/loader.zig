@@ -146,6 +146,11 @@ pub const DEFAULT_CONFIG_TEMPLATE =
     \\# Run ls automatically after changing directory with a gesture.
     \\dir-cd-ls = true
     \\
+    \\# Session Settings
+    \\# Inherit working directory from the last focused Zinc window for new windows.
+    \\# When false (default), new windows start in your launcher's directory (~).
+    \\session-inherit-cwd = false
+    \\
 ;
 
 /// Resolve the zinc config directory into `out`. Shared by the loader and the
@@ -362,6 +367,7 @@ test "outdated config writes config.new once, leaves config alone" {
     const nlen = H.readAll(tnew.ptr, &nbuf);
     try std.testing.expect(nlen > 0);
     try std.testing.expect(std.mem.indexOf(u8, nbuf[0..nlen], "config-version = 9") != null);
+    try std.testing.expect(std.mem.indexOf(u8, nbuf[0..nlen], "session-inherit-cwd") != null);
     try std.testing.expect(std.mem.indexOf(u8, nbuf[0..nlen], "find-match-numbers") != null);
     try std.testing.expect(std.mem.indexOf(u8, nbuf[0..nlen], "cursor-glide") != null);
     try std.testing.expect(std.mem.indexOf(u8, nbuf[0..nlen], "window-width") != null);
@@ -405,7 +411,7 @@ test "template documents every supported key" {
         "smooth-scroll",     "smooth-scroll-ms", "scroll-step",             "selection-single-cell", "find-match-numbers",
         "find-number-scale", "editor-command",   "editor-command-terminal", "dir-cd-mod",            "dir-open-mod",
         "dir-cd-ls",         "shell",            "login-shell",             "window-width",          "window-height",
-        "window-size",       "config-version",
+        "window-size",       "session-inherit-cwd", "config-version",
     };
     for (keys) |k| {
         try std.testing.expect(std.mem.indexOf(u8, DEFAULT_CONFIG_TEMPLATE, k) != null);

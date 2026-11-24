@@ -29,7 +29,7 @@ Full breakdown in [features.md](features.md).
 # require a new window.
 # When new settings ship, Zinc writes an updated reference file to
 # config.new next to this file without changing your config.
-config-version = 8
+config-version = 9
 
 # Shell
 # Command or binary to run, such as "fish" or "/bin/zsh".
@@ -79,6 +79,8 @@ foreground = #dcdccc
 selection-background = #dcdccc
 selection-foreground = #0b0f11
 cursor-color = #dcdccc
+# Foreground color of the character drawn on a focused block cursor.
+cursor-foreground = #0b0f11
 link-color = #8cd0d3
 
 # Background opacity from 0.0 (transparent) to 1.0 (opaque).

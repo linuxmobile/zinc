@@ -324,6 +324,7 @@ pub fn App(comptime cfg: config_mod.Config) type {
         bg_opacity: u8 = cfg.bg_opacity,
         selection_bg: u32 = cfg.selection_bg,
         selection_fg: u32 = cfg.selection_fg,
+        cursor_foreground: ?u32 = cfg.cursor_foreground,
         link_color: u32 = cfg.link_color,
         cursor_style: config_mod.CursorStyle = cfg.cursor_style,
         cursor_blink: bool = cfg.cursor_blink,
@@ -677,6 +678,7 @@ pub fn App(comptime cfg: config_mod.Config) type {
                 .linear_blending = runtime_cfg.linear_blending orelse cfg.linear_blending,
                 .selection_bg = runtime_cfg.selection_bg orelse cfg.selection_bg,
                 .selection_fg = runtime_cfg.selection_fg orelse cfg.selection_fg,
+                .cursor_foreground = runtime_cfg.cursor_foreground orelse cfg.cursor_foreground,
                 .link_color = runtime_cfg.link_color orelse cfg.link_color,
                 .cursor_style = runtime_cfg.cursor_style orelse cfg.cursor_style,
                 .cursor_blink = runtime_cfg.cursor_blink orelse cfg.cursor_blink,
@@ -1505,6 +1507,55 @@ pub fn App(comptime cfg: config_mod.Config) type {
             dmgMerge(dmg, gdmg);
         }
 
+        /// Paint a cell's glyph, procedural box fallback and combining marks.
+        /// The explicit foreground lets the cursor repaint its cell's glyph.
+        fn drawCellGlyphs(
+            self: *Self,
+            cell: anytype,
+            x: u32,
+            y: u32,
+            cw: i32,
+            ch: i32,
+            fg: u32,
+            W: u32,
+            H: u32,
+            dmg: *software.Damage,
+        ) void {
+            const cp = cellCp(cell.rune);
+            if (cp == ' ' or cp == 0) return;
+            if (box_drawing.isBlockElement(cp) and
+                box_drawing.draw(self.pool_pixels, W, H, x, y, cw, ch, cp, fg, dmg)) return;
+            const style: ft_mod.Style = if (cell.attr.bold and cell.attr.italic)
+                .bold_italic
+            else if (cell.attr.bold)
+                .bold
+            else if (cell.attr.italic)
+                .italic
+            else
+                .regular;
+            if (!self.blitKeycapLigature(cp, cell.combining[0..cell.combining_count], x, y, W, H, dmg)) {
+                const plate = self.blitKeycapPlate(cell.combining[0..cell.combining_count], style, x, y, fg, W, H, dmg);
+                const base_fg = if (plate) |dark| (if (dark) @as(u32, 0xFF000000) else @as(u32, 0xFFFFFFFF)) else fg;
+                if (self.glyphFor(cp, style)) |g| {
+                    if ((g.w == 0 or g.h == 0) and box_drawing.isBoxDrawingOrBlock(cp)) {
+                        _ = box_drawing.draw(self.pool_pixels, W, H, x, y, cw, ch, cp, base_fg, dmg);
+                    } else {
+                        self.blitCellGlyph(g, x, y, base_fg, W, H, dmg);
+                    }
+                } else if (box_drawing.isBoxDrawingOrBlock(cp)) {
+                    _ = box_drawing.draw(self.pool_pixels, W, H, x, y, cw, ch, cp, base_fg, dmg);
+                }
+                var ci: u8 = 0;
+                while (ci < cell.combining_count) : (ci += 1) {
+                    const ccp = cellCp(cell.combining[ci]);
+                    if (plate != null and ccp == 0x20E3) continue;
+                    if (self.glyphFor(ccp, style)) |g| {
+                        self.blitCellGlyph(g, x, y, fg, W, H, dmg);
+                    }
+                }
+            }
+        }
+
         fn drawBarText(self: *Self, text: []const u8, fg: u32, x0: i32, y: u32, cw: i32, ch: i32, W: u32, H: u32, dmg: *software.Damage) void {
             _ = ch;
             var x = x0;
@@ -2236,58 +2287,12 @@ pub fn App(comptime cfg: config_mod.Config) type {
                     if (!cell.attr.invisible) {
                         const cp = cellCp(cell.rune);
                         if (cp != ' ' and cp != 0) {
-                            // Kitty unicode placeholder: blit the image
-                            // slice; the diacritic combining marks must not
-                            // render as glyphs over it.
                             if (cfg.kitty_gfx and cp == placeholder_mod.PLACEHOLDER and
                                 self.blitPlaceholder(col, row, x, y, W, H, &dmg))
                             {
                                 continue;
                             }
-                            var drawn_box = false;
-                            // Unicode Block Elements (0x2580..0x259F: █, ▀, ▄, shades, quadrants):
-                            // Render procedurally with 100% cell coverage so adjacent cells connect
-                            // with zero gaps (fixes OpenCode logo, shade blocks, and progress bars).
-                            if (box_drawing.isBlockElement(cp)) {
-                                drawn_box = box_drawing.draw(self.pool_pixels, W, H, x, y, cw, ch, cp, fg, &dmg);
-                            }
-                            if (!drawn_box) {
-                                const style: ft_mod.Style = if (cell.attr.bold and cell.attr.italic)
-                                    .bold_italic
-                                else if (cell.attr.bold)
-                                    .bold
-                                else if (cell.attr.italic)
-                                    .italic
-                                else
-                                    .regular;
-                                // Native ligature first (single designed
-                                // glyph); plate+legend fallback below.
-                                if (!self.blitKeycapLigature(cellCp(cell.rune), cell.combining[0..cell.combining_count], x, y, W, H, &dmg)) {
-                                    // Keycap plate under the digit (solid center);
-                                    // the legend takes the baked contrast color.
-                                    const plate = self.blitKeycapPlate(cell.combining[0..cell.combining_count], style, x, y, fg, W, H, &dmg);
-                                    const base_fg = if (plate) |dark| (if (dark) @as(u32, 0xFF000000) else @as(u32, 0xFFFFFFFF)) else fg;
-                                    if (self.glyphFor(cp, style)) |g| {
-                                        if ((g.w == 0 or g.h == 0) and box_drawing.isBoxDrawingOrBlock(cp)) {
-                                            // Cached tofu-blank must not shadow the
-                                            // procedural fallback: borders always draw.
-                                            _ = box_drawing.draw(self.pool_pixels, W, H, x, y, cw, ch, cp, base_fg, &dmg);
-                                        } else {
-                                            self.blitCellGlyph(g, x, y, base_fg, W, H, &dmg);
-                                        }
-                                    } else if (box_drawing.isBoxDrawingOrBlock(cp)) {
-                                        _ = box_drawing.draw(self.pool_pixels, W, H, x, y, cw, ch, cp, base_fg, &dmg);
-                                    }
-                                    var ci: u8 = 0;
-                                    while (ci < cell.combining_count) : (ci += 1) {
-                                        const ccp = cellCp(cell.combining[ci]);
-                                        if (plate != null and ccp == 0x20E3) continue;
-                                        if (self.glyphFor(ccp, style)) |g| {
-                                            self.blitCellGlyph(g, x, y, fg, W, H, &dmg);
-                                        }
-                                    }
-                                }
-                            }
+                            self.drawCellGlyphs(cell, x, y, cw, ch, fg, W, H, &dmg);
                         }
                         // Underlines: single/double bars, triangle-wave
                         // curly, dotted and dashed variants.
@@ -2410,7 +2415,25 @@ pub fn App(comptime cfg: config_mod.Config) type {
                 const sx0: i32 = if (tgtx < gp.x) -sdx else 0;
                 if (self.ctx.focused) {
                     switch (self.ctx.decscusr_style orelse self.cursor_style) {
-                        .block => software.fillRect(self.pool_pixels, W, H, @intCast(@max(0, ccx + sx0)), @intCast(@max(0, ccy)), @intCast(cwu + sdx), @intCast(chu), cur, &dmg),
+                        .block => {
+                            const gx: i32 = @max(0, ccx + sx0);
+                            const gy: i32 = @max(0, ccy);
+                            software.fillRect(self.pool_pixels, W, H, @intCast(gx), @intCast(gy), @intCast(cwu + sdx), @intCast(chu), cur, &dmg);
+                            if (self.cursor_foreground) |cf_raw| {
+                                const sw: i32 = @intCast(W);
+                                const sh: i32 = @intCast(H);
+                                if (gx < sw and gy < sh) {
+                                    const gw: i32 = @min(sw - gx, cwu + sdx);
+                                    const gh: i32 = @min(sh - gy, chu);
+                                    if (self.ctx.grid.viewCellAt(self.ctx.cursor_col, self.ctx.cursor_row, eff)) |cc| {
+                                        if (!cc.attr.invisible) {
+                                            const cf = 0xFF000000 | (cf_raw & 0xFFFFFF);
+                                            self.drawCellGlyphs(cc.*, @intCast(gx), @intCast(gy), gw, gh, cf, W, H, &dmg);
+                                        }
+                                    }
+                                }
+                            }
+                        },
                         .bar => software.fillRect(self.pool_pixels, W, H, @intCast(@max(0, ccx + sx0)), @intCast(@max(0, ccy)), @intCast(@min(t, cwu) + sdx), @intCast(chu), cur, &dmg),
                         .underline => software.fillRect(self.pool_pixels, W, H, @intCast(@max(0, ccx + sx0)), @intCast(@max(0, ccy + chu - t)), @intCast(cwu + sdx), @intCast(t), cur, &dmg),
                     }
@@ -2636,6 +2659,7 @@ pub fn App(comptime cfg: config_mod.Config) type {
             self.bg_opacity = self.runtime_cfg.bg_opacity orelse cfg.bg_opacity;
             self.selection_bg = self.runtime_cfg.selection_bg orelse cfg.selection_bg;
             self.selection_fg = self.runtime_cfg.selection_fg orelse cfg.selection_fg;
+            self.cursor_foreground = self.runtime_cfg.cursor_foreground orelse cfg.cursor_foreground;
             self.link_color = self.runtime_cfg.link_color orelse cfg.link_color;
             self.cursor_style = self.runtime_cfg.cursor_style orelse cfg.cursor_style;
             self.cursor_blink = self.runtime_cfg.cursor_blink orelse cfg.cursor_blink;

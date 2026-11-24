@@ -59,6 +59,8 @@ pub const Config = struct {
     bg: u32 = 0x0B0F11,
     fg: u32 = 0xDCDCCC,
     cursor_color: u32 = 0xDCDCCC,
+    /// Color of the glyph drawn on top of a focused block cursor.
+    cursor_foreground: u32 = 0x0B0F11,
     // Selection: two flat colors (Ghostty-style), readable on any content.
     selection_bg: u32 = 0xDCDCCC,
     selection_fg: u32 = 0x0B0F11,

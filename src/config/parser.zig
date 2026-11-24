@@ -27,6 +27,7 @@ pub const RuntimeConfig = struct {
     selection_bg: ?u32 = null,
     selection_fg: ?u32 = null,
     cursor_color: ?u32 = null,
+    cursor_foreground: ?u32 = null,
     link_color: ?u32 = null,
     bg_opacity: ?u8 = null,
     cursor_style: ?CursorStyle = null,
@@ -203,6 +204,8 @@ pub fn parse(content: []const u8, cfg: *RuntimeConfig, gpa: std.mem.Allocator) v
             if (parseColor(val)) |c| cfg.selection_fg = c;
         } else if (std.ascii.eqlIgnoreCase(key, "cursor-color") or std.ascii.eqlIgnoreCase(key, "cursor_color")) {
             if (parseColor(val)) |c| cfg.cursor_color = c;
+        } else if (std.ascii.eqlIgnoreCase(key, "cursor-foreground") or std.ascii.eqlIgnoreCase(key, "cursor-fg") or std.ascii.eqlIgnoreCase(key, "cursor_foreground") or std.ascii.eqlIgnoreCase(key, "cursor_fg")) {
+            if (parseColor(val)) |c| cfg.cursor_foreground = c;
         } else if (std.ascii.eqlIgnoreCase(key, "link-color") or std.ascii.eqlIgnoreCase(key, "link_color")) {
             if (parseColor(val)) |c| cfg.link_color = c;
         } else if (std.ascii.eqlIgnoreCase(key, "background-opacity") or std.ascii.eqlIgnoreCase(key, "opacity") or std.ascii.eqlIgnoreCase(key, "background_opacity")) {
@@ -338,6 +341,17 @@ test "parse color formats" {
     try std.testing.expectEqual(@as(?u32, 0xDCDCCC), parseColor("DCDCCC"));
     try std.testing.expectEqual(@as(?u32, 0xFFFFFF), parseColor("#fff"));
     try std.testing.expectEqual(@as(?u32, 0x112233), parseColor("#123"));
+}
+
+test "parse cursor-foreground color" {
+    var cfg = RuntimeConfig{};
+    defer cfg.deinit(std.testing.allocator);
+    parse("cursor-foreground = #ff8800\n", &cfg, std.testing.allocator);
+    try std.testing.expectEqual(@as(?u32, 0xFF8800), cfg.cursor_foreground);
+    parse("cursor_fg = #000000\n", &cfg, std.testing.allocator);
+    try std.testing.expectEqual(@as(?u32, 0), cfg.cursor_foreground);
+    parse("cursor-foreground = nonsense\n", &cfg, std.testing.allocator);
+    try std.testing.expectEqual(@as(?u32, 0), cfg.cursor_foreground.?);
 }
 
 test "parse opacity formats" {

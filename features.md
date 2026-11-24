@@ -7,6 +7,7 @@ A list of what zinc does.
 * **Cursor glide.** The cursor moves smoothly to its target cell instead of jumping instantly.
 * **Cursor trails.** A brief fading trail follows the cursor when it moves quickly.
 * **Cursor shapes.** Supports block, beam, and underline. Switches to a hollow wireframe box when the window loses focus.
+* **Cursor foreground.** A configurable `cursor-foreground` color paints the character on top of a focused block cursor so it stays readable.
 * **Smooth scrolling.** The screen scrolls smoothly per pixel instead of jumping full lines at a time.
 * **Auto-hiding scrollbar.** A thin scrollbar appears on the right edge while scrolling and fades away after a second of idle.
 * **Window transparency.** Background opacity lets wallpaper or desktop blur show through, while text and colored blocks stay solid.
